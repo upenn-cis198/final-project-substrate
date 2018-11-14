@@ -1,0 +1,12 @@
+[package]
+name = "subkey"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+
+[dependencies]
+substrate-primitives = { version = "*", path = "../core/primitives" }
+rand = "0.4"
+clap = { version = "~2.32", features = ["yaml"] }
+
+[features]
+bench = []
