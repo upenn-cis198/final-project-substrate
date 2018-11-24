@@ -34,3 +34,18 @@ Section::Function(FunctionSection::deserialize(reader)?)
 Ok(FunctionSection(read_entries(reader)?))
 ```
 and `read_entries` returns a `Result<Vec<T>>`.
+
+## Check Numeric Instruction
+
+We need to check on function section for function signature in WASM binary. 
+```
+Function and Code sections
+A single logical function definition is defined in two sections:
+
+the function section declares the signatures of each internal function definition in the module;
+the code section contains the function body of each function declared by the function section.
+This split aids in streaming compilation by putting the function bodies, which constitute most of the byte size
+of the module, near the end so that all metadata necessary for recursive module loading and parallel
+compilation is available before compilation begins.
+```
+Reference: https://webassembly.org/docs/modules/ 

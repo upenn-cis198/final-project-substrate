@@ -1,0 +1,8 @@
+[package]
+name = "wasm-chisel"
+version = "0.1.0"
+authors = ["zixuanzh <zixuanzh@seas.upenn.edu>"]
+edition = "2018"
+
+[dependencies]
+parity-wasm = "0.35"
