@@ -4,6 +4,7 @@ mod classifications;
 
 use crate::classifications::*;
 use self::Filter::*;
+use std::mem::discriminant;
 
 pub enum Filter {
 	NumericInstructions,
@@ -19,15 +20,15 @@ pub struct ModuleValidator<'a> {
 
 impl<'a> ModuleValidator<'a> {
 
-	pub fn new(module: &'a Module) -> Self {
-		ModuleValidator{ module, filter: NoFilter, stack: vec![] }
+	pub fn new(module: &'a Module, filter: Filter) -> Self {
+		ModuleValidator{ module, filter, stack: vec![] }
 	}
 
 	pub fn validate(&mut self) -> Result<(), String> {
 		match self.module.code_section() {
 			Some(functions) => {
-				for function in functions.bodies() {
-					match self.check_instructions(function) {
+				for (index, function) in functions.bodies().iter().enumerate() {
+					match self.check_instructions(function, index) {
 						Ok(_) => continue,
 						Err(s) => return Err(s)
 					}
@@ -38,14 +39,15 @@ impl<'a> ModuleValidator<'a> {
 		}
 	}
 
-	fn check_instructions(&mut self, body: &FuncBody) -> Result<(), String> {
+	fn check_instructions(&mut self, body: &FuncBody, index: usize) -> Result<(), String> {
 		for instruction in body.code().elements() {
-			if GET_INST.contains(instruction) {
-				self.push_get(instruction, body);
+			println!("{:?}", instruction);
+			if GET_INST.iter().any(|f| discriminant(f) == discriminant(instruction)) {
+				self.push_get(instruction, body, index);
 			}
 			match self.filter {
 				NumericInstructions => {
-					if I32_BINOP.contains(instruction) {
+					if I32_BINOP.iter().any(|f| discriminant(f) == discriminant(instruction)) {
 						self.validate_binop(instruction, ValueType::I32).unwrap()
 					}
 				}
@@ -55,30 +57,48 @@ impl<'a> ModuleValidator<'a> {
 		return Ok(());
 	}
 
-	fn validate_binop(&mut self, instruction: &Instruction, vtype: ValueType) -> Option<()> {
+	fn validate_binop(&mut self, instruction: &Instruction, vtype: ValueType) -> Result<(), String> {
 		for _ in 0..2 {
 			let value = self.stack.pop();
 			match value {
-				Some(value) => if value != vtype { panic!(); }
-				None => panic!()
+				Some(value) => {
+					if value != vtype { panic!(); }
+				}
+				None => panic!("None")
 
 			}
 		}
 		self.stack.push(ValueType::I32);
 
-		Some(())
+		Ok(())
 	}
 
-	fn push_get(&mut self, instruction: &Instruction, body: &FuncBody) {
+	fn push_get(&mut self, instruction: &Instruction, body: &FuncBody, index: usize) -> Result<(), String> {
+
+		// These next couple lines are just to get the parameters of the function we're dealing with.
+		// We need the parameters because they can be loaded like local variables but they're not in the locals vec
+
+		// type_ref is the index of the FunctionType in types_section
+		let type_ref = self.module.function_section().unwrap().entries()[index].type_ref();
+		let type_variant = &self.module.type_section().unwrap().types()[type_ref as usize];
+
+		let mut locals = body.locals().to_vec();
+		match type_variant {
+			Type::Function(ftype) => {
+				locals.extend(ftype.params().iter().map(|f| Local::new(0, *f)));
+			}
+		}
+
 		match instruction {
 			// TODO: Error handling
-			Instruction::GetGlobal(local) => self.stack.push(body.locals().get(*local as usize).unwrap().value_type()),
+			Instruction::GetGlobal(local) => self.stack.push(locals.get(*local as usize).unwrap().value_type()),
 			Instruction::GetLocal(local) => {
-				println!("{:?}", body.locals());
-				self.stack.push(body.locals().get(*local as usize).unwrap().value_type())
+				self.stack.push(locals.get(*local as usize).unwrap().value_type())
 			},
 			_ => panic!() // Never gonna happen
 		}
+
+		Ok(())
 	}
 }
 
@@ -88,10 +108,10 @@ mod tests {
 	use super::*;
 	use parity_wasm::elements::deserialize_buffer;
 
-	#[test]
-	fn it_works() {
-		assert_eq!(2 + 2, 4);
-	}
+//	#[test]
+//	fn it_works() {
+//		assert_eq!(2 + 2, 4);
+//	}
 
 	#[test]
 	fn print_instructions_simple_binary() {
@@ -111,63 +131,54 @@ mod tests {
 
 		let module = deserialize_buffer::<Module>(&wasm).unwrap();
 
-		match module.code_section() {
-			Some(section) => {
-				for function in section.bodies() {
-					println!("{:?}", function.code().elements());
-				}
-			}
-			None => println!("No Functions")
-		}
-
-		let mut validator = ModuleValidator::new(&module);
+		let mut validator = ModuleValidator::new(&module, NumericInstructions);
 		validator.validate();
 	}
 
-	#[test]
-	fn print_instructions_complex_binary() {
-		// WAST:
-		// (module
-		//   (type $t0 (func (param i32 i32) (result i32)))
-		//   (func $_Z4multii (export "_Z4multii") (type $t0) (param $p0 i32) (param $p1 i32) (result i32)
-		//     (i32.mul
-		//       (get_local $p1)
-		//       (get_local $p0)))
-		//   (func $_Z3addii (export "_Z3addii") (type $t0) (param $p0 i32) (param $p1 i32) (result i32)
-		//     (i32.add
-		//       (get_local $p1)
-		//       (get_local $p0)))
-		//   (func $_Z6divideii (export "_Z6divideii") (type $t0) (param $p0 i32) (param $p1 i32) (result i32)
-		//     (i32.div_s
-		//       (get_local $p0)
-		//       (get_local $p1)))
-		//   (table $T0 0 anyfunc)
-		//   (memory $memory (export "memory") 1))
-
-		let wasm: Vec<u8> = vec![
-			0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01,
-			0x7f, 0x03, 0x04, 0x03, 0x00, 0x00, 0x00, 0x04, 0x04, 0x01, 0x70, 0x00, 0x00, 0x05, 0x03, 0x01,
-			0x00, 0x01, 0x07, 0x2f, 0x04, 0x09, 0x5f, 0x5a, 0x34, 0x6d, 0x75, 0x6c, 0x74, 0x69, 0x69, 0x00,
-			0x00, 0x08, 0x5f, 0x5a, 0x33, 0x61, 0x64, 0x64, 0x69, 0x69, 0x00, 0x01, 0x0b, 0x5f, 0x5a, 0x36,
-			0x64, 0x69, 0x76, 0x69, 0x64, 0x65, 0x69, 0x69, 0x00, 0x02, 0x06, 0x6d, 0x65, 0x6d, 0x6f, 0x72,
-			0x79, 0x02, 0x00, 0x0a, 0x19, 0x03, 0x07, 0x00, 0x20, 0x01, 0x20, 0x00, 0x6c, 0x0b, 0x07, 0x00,
-			0x20, 0x01, 0x20, 0x00, 0x6a, 0x0b, 0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x6d, 0x0b, 0x00, 0x4b,
-			0x04, 0x6e, 0x61, 0x6d, 0x65, 0x01, 0x23, 0x03, 0x00, 0x09, 0x5f, 0x5a, 0x34, 0x6d, 0x75, 0x6c,
-			0x74, 0x69, 0x69, 0x01, 0x08, 0x5f, 0x5a, 0x33, 0x61, 0x64, 0x64, 0x69, 0x69, 0x02, 0x0b, 0x5f,
-			0x5a, 0x36, 0x64, 0x69, 0x76, 0x69, 0x64, 0x65, 0x69, 0x69, 0x02, 0x1f, 0x03, 0x00, 0x02, 0x00,
-			0x02, 0x70, 0x30, 0x01, 0x02, 0x70, 0x31, 0x01, 0x02, 0x00, 0x02, 0x70, 0x30, 0x01, 0x02, 0x70,
-			0x31, 0x02, 0x02, 0x00, 0x02, 0x70, 0x30, 0x01, 0x02, 0x70, 0x31
-		];
-
-		let module = deserialize_buffer::<Module>(&wasm).unwrap();
-
-		match module.code_section() {
-			Some(section) => {
-				for function in section.bodies() {
-					println!("{:?}", function.code().elements());
-				}
-			}
-			None => println!("No Functions")
-		}
-	}
+//	#[test]
+//	fn print_instructions_complex_binary() {
+//		// WAST:
+//		// (module
+//		//   (type $t0 (func (param i32 i32) (result i32)))
+//		//   (func $_Z4multii (export "_Z4multii") (type $t0) (param $p0 i32) (param $p1 i32) (result i32)
+//		//     (i32.mul
+//		//       (get_local $p1)
+//		//       (get_local $p0)))
+//		//   (func $_Z3addii (export "_Z3addii") (type $t0) (param $p0 i32) (param $p1 i32) (result i32)
+//		//     (i32.add
+//		//       (get_local $p1)
+//		//       (get_local $p0)))
+//		//   (func $_Z6divideii (export "_Z6divideii") (type $t0) (param $p0 i32) (param $p1 i32) (result i32)
+//		//     (i32.div_s
+//		//       (get_local $p0)
+//		//       (get_local $p1)))
+//		//   (table $T0 0 anyfunc)
+//		//   (memory $memory (export "memory") 1))
+//
+//		let wasm: Vec<u8> = vec![
+//			0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01,
+//			0x7f, 0x03, 0x04, 0x03, 0x00, 0x00, 0x00, 0x04, 0x04, 0x01, 0x70, 0x00, 0x00, 0x05, 0x03, 0x01,
+//			0x00, 0x01, 0x07, 0x2f, 0x04, 0x09, 0x5f, 0x5a, 0x34, 0x6d, 0x75, 0x6c, 0x74, 0x69, 0x69, 0x00,
+//			0x00, 0x08, 0x5f, 0x5a, 0x33, 0x61, 0x64, 0x64, 0x69, 0x69, 0x00, 0x01, 0x0b, 0x5f, 0x5a, 0x36,
+//			0x64, 0x69, 0x76, 0x69, 0x64, 0x65, 0x69, 0x69, 0x00, 0x02, 0x06, 0x6d, 0x65, 0x6d, 0x6f, 0x72,
+//			0x79, 0x02, 0x00, 0x0a, 0x19, 0x03, 0x07, 0x00, 0x20, 0x01, 0x20, 0x00, 0x6c, 0x0b, 0x07, 0x00,
+//			0x20, 0x01, 0x20, 0x00, 0x6a, 0x0b, 0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x6d, 0x0b, 0x00, 0x4b,
+//			0x04, 0x6e, 0x61, 0x6d, 0x65, 0x01, 0x23, 0x03, 0x00, 0x09, 0x5f, 0x5a, 0x34, 0x6d, 0x75, 0x6c,
+//			0x74, 0x69, 0x69, 0x01, 0x08, 0x5f, 0x5a, 0x33, 0x61, 0x64, 0x64, 0x69, 0x69, 0x02, 0x0b, 0x5f,
+//			0x5a, 0x36, 0x64, 0x69, 0x76, 0x69, 0x64, 0x65, 0x69, 0x69, 0x02, 0x1f, 0x03, 0x00, 0x02, 0x00,
+//			0x02, 0x70, 0x30, 0x01, 0x02, 0x70, 0x31, 0x01, 0x02, 0x00, 0x02, 0x70, 0x30, 0x01, 0x02, 0x70,
+//			0x31, 0x02, 0x02, 0x00, 0x02, 0x70, 0x30, 0x01, 0x02, 0x70, 0x31
+//		];
+//
+//		let module = deserialize_buffer::<Module>(&wasm).unwrap();
+//
+//		match module.code_section() {
+//			Some(section) => {
+//				for function in section.bodies() {
+//					println!("{:?}", function.code().elements());
+//				}
+//			}
+//			None => println!("No Functions")
+//		}
+//	}
 }
