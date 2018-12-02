@@ -56,13 +56,13 @@ impl<'a> ModuleValidator<'a> {
 		return Ok(());
 	}
 
-	fn validate_binop(&mut self, instruction: &Instruction, vtype: ValueType) -> Result<(), InstructionError> {
+	fn validate_binop(&mut self, _instruction: &Instruction, vtype: ValueType) -> Result<(), InstructionError> {
 		let value1 = self.stack.pop();
 		let value2 = self.stack.pop();
 
 		match (value1, value2) {
 			(Some(v1), Some(v2)) => {
-				if (v1 == vtype && v2 == vtype) {
+				if v1 == vtype && v2 == vtype {
 					self.stack.push(ValueType::I32);
 					Ok(())
 				} else {
@@ -138,7 +138,7 @@ mod tests {
 		let module = deserialize_buffer::<Module>(&wasm).unwrap();
 
 		let mut validator = ModuleValidator::new(&module, NumericInstructions);
-		validator.validate();
+		validator.validate().unwrap();
 	}
 
 	#[test]
