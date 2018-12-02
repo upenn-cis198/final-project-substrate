@@ -48,7 +48,10 @@ impl<'a> ModuleValidator<'a> {
 				NumericInstructions => {
 					if I32_BINOP.iter().any(|f| discriminant(f) == discriminant(instruction)) {
 						self.validate_binop(instruction, ValueType::I32)?
-					}
+					} 
+					// else if I32_BINOP.iter().any(|f| discriminant(f) == discriminant(instruction)) {
+					// 	()
+					// }
 				}
 				NoFilter => () // TODO: do this
 			}
@@ -146,6 +149,13 @@ mod tests {
 	fn unmatched_type_failure_binary() {
 		// Binary incorrectly tries to add an f64 with i32 to return an i32
 		// This should be failed by the validator
+		// WAST:
+		// (module
+		//   (func $addTwo (param f64 i32) (result i32)
+		//     get_local 0
+		//     get_local 1
+		//     i32.add)
+		//   (export "addTwo" (func $addTwo)))
 		let wasm: Vec<u8> = vec![
 			0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02, 0x7c, 0x7f, 0x01,
 			0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x0a, 0x01, 0x06, 0x61, 0x64, 0x64, 0x54, 0x77, 0x6f, 0x00,

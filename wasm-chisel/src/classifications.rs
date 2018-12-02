@@ -23,3 +23,7 @@ pub const I32_BINOP: [Instruction; 15] = [
 	I32Rotl,
 	I32Rotr,
 ];
+
+// pub const I32_TESTOP: [Instruction; 1] = [
+// 	I32Eqz,
+// ];
