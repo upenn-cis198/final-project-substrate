@@ -147,6 +147,7 @@ fn contains(instruction: &Instruction, container: &[Instruction]) -> bool {
 mod tests {
 	use super::*;
 	use parity_wasm::elements::deserialize_buffer;
+	use parity_wasm::deserialize_file;
 
 	#[test]
 	fn print_instructions_simple_binary() {
@@ -192,6 +193,13 @@ mod tests {
 
 		let module = deserialize_buffer::<Module>(&wasm).unwrap();
 
+		let mut validator = ModuleValidator::new(&module, NumericInstructions);
+		validator.validate().unwrap();
+	}
+
+	#[test]
+	fn simple_wasm_from_file() {
+		let module = deserialize_file("./src/wasm_binaries/add_two_i32.wasm").unwrap();
 		let mut validator = ModuleValidator::new(&module, NumericInstructions);
 		validator.validate().unwrap();
 	}
