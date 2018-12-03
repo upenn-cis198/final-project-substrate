@@ -1,3 +1,4 @@
+use parity_wasm::elements::Instruction;
 use std::error;
 use std::fmt;
 
@@ -6,35 +7,35 @@ pub enum InstructionError {
 	GlobalNotFound,
 	LocalNotFound,
 	UnmatchedInstruction,
-	InvalidBinaryOperation,
+	InvalidOperation(Instruction),
 }
 
 impl fmt::Display for InstructionError {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match *self {
+		match self {
 			InstructionError::GlobalNotFound =>
-				write!(f, "global not found"),
+				write!(f, "Global not found"),
 			InstructionError::LocalNotFound =>
-				write!(f, "local not found"),
+				write!(f, "Local not found"),
 			InstructionError::UnmatchedInstruction =>
-				write!(f, "unmatched instruction"),
-			InstructionError::InvalidBinaryOperation =>
-				write!(f, "invalid binary operation"),
+				write!(f, "Unmatched instruction"),
+			InstructionError::InvalidOperation(i) =>
+				write!(f, "{}", format!("Invalid operation: {:?}", i).as_str()),
 		}
 	}
 }
 
 impl error::Error for InstructionError {
 	fn description(&self) -> &str {
-		match *self {
+		match self {
 			InstructionError::GlobalNotFound =>
-				"global not found",
+				"Global not found",
 			InstructionError::LocalNotFound =>
-				"local not found",
+				"Local not found",
 			InstructionError::UnmatchedInstruction =>
-				"unmatched instruction",
-			InstructionError::InvalidBinaryOperation =>
-				"invalid binary operation",
+				"Unmatched instruction",
+			InstructionError::InvalidOperation(_) =>
+				"Invalid operation"
 		}
 	}
 

@@ -8,6 +8,21 @@ use crate::errors::*;
 use self::Filter::*;
 use std::mem::discriminant;
 
+/*
+ * TODO:
+ * 1. Proper error propagating
+ * 2. Documentation
+ * 3. Good tests with expected failures
+ */
+
+type Pop = Vec<ValueType>;
+type Push = Vec<ValueType>;
+
+struct Signature {
+	pop: Pop,
+	push: Push
+}
+
 pub enum Filter {
 	NumericInstructions,
 	NoFilter
@@ -40,18 +55,24 @@ impl<'a> ModuleValidator<'a> {
 
 	fn check_instructions(&mut self, body: &FuncBody, index: usize) -> Result<(), InstructionError> {
 		for instruction in body.code().elements() {
-			println!("{:?}", instruction);
-			if GET_INST.iter().any(|f| discriminant(f) == discriminant(instruction)) {
-				self.push_get(instruction, body, index)?;
+			if contains(instruction, &GET_INST) {
+				self.push_global_or_local(instruction, body, index)?;
 			}
 			match self.filter {
 				NumericInstructions => {
-					if I32_BINOP.iter().any(|f| discriminant(f) == discriminant(instruction)) {
-						self.validate_binop(instruction, ValueType::I32)?
-					} 
-					// else if I32_BINOP.iter().any(|f| discriminant(f) == discriminant(instruction)) {
-					// 	()
-					// }
+					if contains(instruction, &I32_BINOP) {
+						let signature = Signature{ pop: [ValueType::I32; 2].to_vec(), push: [ValueType::I32; 1].to_vec() };
+						self.validate_instruction(&signature, instruction)?;
+					} else if contains(instruction, &I64_BINOP) {
+						let signature = Signature{ pop: [ValueType::I64; 2].to_vec(), push: [ValueType::I64; 1].to_vec() };
+						self.validate_instruction(&signature, instruction)?;
+					} else if contains(instruction, &F32_BINOP) {
+						let signature = Signature{ pop: [ValueType::F32; 2].to_vec(), push: [ValueType::F32; 1].to_vec() };
+						self.validate_instruction(&signature, instruction)?;
+					} else if contains(instruction, &F64_BINOP) {
+						let signature = Signature{ pop: [ValueType::F64; 2].to_vec(), push: [ValueType::F64; 1].to_vec() };
+						self.validate_instruction(&signature, instruction)?;
+					}
 				}
 				NoFilter => () // TODO: do this
 			}
@@ -59,24 +80,25 @@ impl<'a> ModuleValidator<'a> {
 		return Ok(());
 	}
 
-	fn validate_binop(&mut self, _instruction: &Instruction, vtype: ValueType) -> Result<(), InstructionError> {
-		let value1 = self.stack.pop();
-		let value2 = self.stack.pop();
-
-		match (value1, value2) {
-			(Some(v1), Some(v2)) => {
-				if v1 == vtype && v2 == vtype {
-					self.stack.push(ValueType::I32);
-					Ok(())
-				} else {
-					Err(InstructionError::InvalidBinaryOperation)
+	fn validate_instruction(&mut self, signature: &Signature, instruction: &Instruction) -> Result<(), InstructionError> {
+		for signature_value in &signature.pop {
+			let value = self.stack.pop();
+			match value {
+				Some(stack_value) => {
+					if stack_value != *signature_value {
+						return Err(InstructionError::InvalidOperation(instruction.clone()))
+					}
 				}
+				None => return Err(InstructionError::InvalidOperation(instruction.clone())) // Instructions are small, so clone
+
 			}
-			_ => Err(InstructionError::InvalidBinaryOperation)
 		}
+		self.stack.extend(&signature.push);
+
+		Ok(())
 	}
 
-	fn push_get(&mut self, instruction: &Instruction, body: &FuncBody, index: usize) -> Result<(), InstructionError> {
+	fn push_global_or_local(&mut self, instruction: &Instruction, body: &FuncBody, index: usize) -> Result<(), InstructionError> {
 
 		// These next couple lines are just to get the parameters of the function we're dealing with.
 		// We need the parameters because they can be loaded like local variables but they're not in the locals vec
@@ -95,9 +117,9 @@ impl<'a> ModuleValidator<'a> {
 		match instruction {
 			Instruction::GetGlobal(local) => {
 				match locals.get(*local as usize) {
-					Some(variable) => { 
+					Some(variable) => {
 						self.stack.push(variable.value_type());
-						Ok(())					
+						Ok(())
 					},
 					None => { Err(InstructionError::GlobalNotFound) },
 				}
@@ -114,6 +136,10 @@ impl<'a> ModuleValidator<'a> {
 			_ => { Err(InstructionError::UnmatchedInstruction) },
 		}
 	}
+}
+
+fn contains(instruction: &Instruction, container: &[Instruction]) -> bool {
+	container.iter().any(|f| discriminant(f) == discriminant(instruction))
 }
 
 
