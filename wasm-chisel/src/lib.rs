@@ -77,7 +77,7 @@ impl<'a> ModuleValidator<'a> {
 				NoFilter => () // TODO: do this
 			}
 		}
-		return Ok(());
+		Ok(())
 	}
 
 	fn validate_instruction(&mut self, signature: &Signature, instruction: &Instruction) -> Result<(), InstructionError> {
