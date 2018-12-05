@@ -183,7 +183,8 @@ mod tests {
 		let module = deserialize_buffer::<Module>(&wasm).unwrap();
 
 		let mut validator = ModuleValidator::new(&module, NumericInstructions);
-		validator.validate().unwrap();
+		let is_valid = validator.validate().unwrap();
+		assert!(is_valid)
 	}
 
 	#[test]
@@ -214,9 +215,17 @@ mod tests {
 
 	#[test]
 	fn simple_wasm_from_file() {
+		// WAST:
+		// (module
+		//   (func $addTwo (param f64 i32) (result i32)
+		//     get_local 0
+		//     get_local 1
+		//     i32.add)
+		//   (export "addTwo" (func $addTwo)))
 		let module = deserialize_file("./src/wasm_binaries/add_two_i32.wasm").unwrap();
 		let mut validator = ModuleValidator::new(&module, NumericInstructions);
-		validator.validate().unwrap();
+		let is_valid = validator.validate().unwrap();
+		assert!(is_valid)
 	}
 
 	#[test]
