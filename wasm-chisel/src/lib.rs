@@ -218,7 +218,7 @@ mod tests {
 		//     get_local 1
 		//     i32.add)
 		//   (export "addTwo" (func $addTwo)))
-		let module = deserialize_file("./src/wasm_binaries/add_two_i32.wasm").unwrap();
+		let module = deserialize_file("./src/wasm_binaries/test.wasm").unwrap();
 		let mut validator = ModuleValidator::new(&module, NumericInstructions);
 		let is_valid = validator.validate().unwrap();
 		assert!(is_valid)
