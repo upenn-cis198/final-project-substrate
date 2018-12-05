@@ -261,13 +261,8 @@ mod tests {
 
 		let module = deserialize_buffer::<Module>(&wasm).unwrap();
 
-		match module.code_section() {
-			Some(section) => {
-				for function in section.bodies() {
-					println!("{:?}", function.code().elements());
-				}
-			}
-			None => println!("No Functions")
-		}
+		let mut validator = ModuleValidator::new(&module, NumericInstructions);
+		let is_valid = validator.validate().unwrap();
+		assert!(is_valid)
 	}
 }
