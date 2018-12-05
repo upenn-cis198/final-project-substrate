@@ -47,7 +47,7 @@ impl<'a> ModuleValidator<'a> {
 				for (index, function) in functions.bodies().iter().enumerate() {
 					let is_function_valid: bool = self.check_instructions(function, index)?;
 					if !is_function_valid {
-						Ok(false)
+						return Ok(false)
 					}
 				}
 				Ok(true)
@@ -59,28 +59,24 @@ impl<'a> ModuleValidator<'a> {
 	fn check_instructions(&mut self, body: &FuncBody, index: usize) -> Result<bool, InstructionError> {
 		for instruction in body.code().elements() {
 			if contains(instruction, &GET_INST) {
-				self.push_global_or_local(instruction, body, index)?;
+				if !self.push_global_or_local(instruction, body, index)? {
+					return Ok(false)
+				}
 			}
 			match self.filter {
 				NumericInstructions => {
-					if contains(instruction, &I32_BINOP) {
-						let signature = Signature{ pop: [ValueType::I32; 2].to_vec(), push: [ValueType::I32; 1].to_vec() };
-						self.validate_instruction(&signature, instruction)?;
-					} else if contains(instruction, &I64_BINOP) {
-						let signature = Signature{ pop: [ValueType::I64; 2].to_vec(), push: [ValueType::I64; 1].to_vec() };
-						self.validate_instruction(&signature, instruction)?;
-					} else if contains(instruction, &F32_BINOP) {
-						let signature = Signature{ pop: [ValueType::F32; 2].to_vec(), push: [ValueType::F32; 1].to_vec() };
-						self.validate_instruction(&signature, instruction)?;
-					} else if contains(instruction, &F64_BINOP) {
-						let signature = Signature{ pop: [ValueType::F64; 2].to_vec(), push: [ValueType::F64; 1].to_vec() };
-						self.validate_instruction(&signature, instruction)?;
-					}
+					let signature = get_instruction_signature(instruction);
+					// if the instruction does not have a signature we are interested in, we continue
+					if !signature.is_none() {
+						if !self.validate_instruction(&signature.unwrap(), instruction)? {
+							return Ok(false)
+						}
+					}					
 				}
 				NoFilter => () // TODO: do this
-			}
+			};
 		}
-		Ok(())
+		Ok(true)
 	}
 
 	fn validate_instruction(&mut self, signature: &Signature, instruction: &Instruction) -> Result<bool, InstructionError> {
@@ -98,7 +94,7 @@ impl<'a> ModuleValidator<'a> {
 		}
 		self.stack.extend(&signature.push);
 
-		Ok(())
+		Ok(true)
 	}
 
 	fn push_global_or_local(&mut self, instruction: &Instruction, body: &FuncBody, index: usize) -> Result<bool, InstructionError> {
@@ -122,7 +118,7 @@ impl<'a> ModuleValidator<'a> {
 				match locals.get(*local as usize) {
 					Some(variable) => {
 						self.stack.push(variable.value_type());
-						Ok(())
+						Ok(true)
 					},
 					None => { Err(InstructionError::GlobalNotFound) },
 				}
@@ -131,7 +127,7 @@ impl<'a> ModuleValidator<'a> {
 				match locals.get(*local as usize) {
 					Some(variable) => {
 						self.stack.push(variable.value_type());
-						Ok(())
+						Ok(true)
 					},
 					None => { Err(InstructionError::LocalNotFound) },
 				}
@@ -143,6 +139,22 @@ impl<'a> ModuleValidator<'a> {
 
 fn contains(instruction: &Instruction, container: &[Instruction]) -> bool {
 	container.iter().any(|f| discriminant(f) == discriminant(instruction))
+}
+
+fn get_instruction_signature(instruction: &Instruction) -> Option<Signature> {
+	// returns some signature if there is a type we are interested in
+	// returns None otherwise
+	if contains(instruction, &I32_BINOP) {
+		Some(Signature{ pop: [ValueType::I32; 2].to_vec(), push: [ValueType::I32; 1].to_vec() })
+	} else if contains(instruction, &I64_BINOP) {
+		Some(Signature{ pop: [ValueType::I64; 2].to_vec(), push: [ValueType::I64; 1].to_vec() })
+	} else if contains(instruction, &F32_BINOP) {
+		Some(Signature{ pop: [ValueType::F32; 2].to_vec(), push: [ValueType::F32; 1].to_vec() })
+	} else if contains(instruction, &F64_BINOP) {
+		Some(Signature{ pop: [ValueType::F64; 2].to_vec(), push: [ValueType::F64; 1].to_vec() })
+	} else {
+		None
+	}
 }
 
 
