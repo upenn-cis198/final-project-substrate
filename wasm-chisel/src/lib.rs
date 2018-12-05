@@ -41,19 +41,22 @@ impl<'a> ModuleValidator<'a> {
 		ModuleValidator{ module, filter, stack: vec![] }
 	}
 
-	pub fn validate(&mut self) -> Result<(), InstructionError> {
+	pub fn validate(&mut self) -> Result<bool, InstructionError> {
 		match self.module.code_section() {
 			Some(functions) => {
 				for (index, function) in functions.bodies().iter().enumerate() {
-					self.check_instructions(function, index)?
+					let is_function_valid: bool = self.check_instructions(function, index)?;
+					if !is_function_valid {
+						Ok(false)
+					}
 				}
-				Ok(())
+				Ok(true)
 			},
-			None => Ok(()),
+			None => Ok(true),
 		}
 	}
 
-	fn check_instructions(&mut self, body: &FuncBody, index: usize) -> Result<(), InstructionError> {
+	fn check_instructions(&mut self, body: &FuncBody, index: usize) -> Result<bool, InstructionError> {
 		for instruction in body.code().elements() {
 			if contains(instruction, &GET_INST) {
 				self.push_global_or_local(instruction, body, index)?;
@@ -80,7 +83,7 @@ impl<'a> ModuleValidator<'a> {
 		Ok(())
 	}
 
-	fn validate_instruction(&mut self, signature: &Signature, instruction: &Instruction) -> Result<(), InstructionError> {
+	fn validate_instruction(&mut self, signature: &Signature, instruction: &Instruction) -> Result<bool, InstructionError> {
 		for signature_value in &signature.pop {
 			let value = self.stack.pop();
 			match value {
@@ -98,7 +101,7 @@ impl<'a> ModuleValidator<'a> {
 		Ok(())
 	}
 
-	fn push_global_or_local(&mut self, instruction: &Instruction, body: &FuncBody, index: usize) -> Result<(), InstructionError> {
+	fn push_global_or_local(&mut self, instruction: &Instruction, body: &FuncBody, index: usize) -> Result<bool, InstructionError> {
 
 		// These next couple lines are just to get the parameters of the function we're dealing with.
 		// We need the parameters because they can be loaded like local variables but they're not in the locals vec
