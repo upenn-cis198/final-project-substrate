@@ -58,19 +58,15 @@ impl<'a> ModuleValidator<'a> {
 
 	fn check_instructions(&mut self, body: &FuncBody, index: usize) -> Result<bool, InstructionError> {
 		for instruction in body.code().elements() {
-			if contains(instruction, &GET_INST) {
-				if !self.push_global_or_local(instruction, body, index)? {
+			if contains(instruction, &GET_INST) && !self.push_global_or_local(instruction, body, index)? {
 					return Ok(false)
-				}
 			}
 			match self.filter {
 				NumericInstructions => {
 					let signature = get_instruction_signature(instruction);
 					// if the instruction does not have a signature we are interested in, we continue
-					if !signature.is_none() {
-						if !self.validate_instruction(&signature.unwrap(), instruction)? {
-							return Ok(false)
-						}
+					if signature.is_some() && !self.validate_instruction(&signature.unwrap(), instruction)? {
+						return Ok(false)
 					}					
 				}
 				NoFilter => () // TODO: do this
