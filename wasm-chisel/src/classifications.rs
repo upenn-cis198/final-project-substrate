@@ -6,6 +6,13 @@ pub const GET_INST: [Instruction; 2] = [
 	GetLocal(0),
 ];
 
+pub const CONST_INST: [Instruction; 4] = [
+	I32Const(0),
+	I64Const(0),
+	F32Const(0),
+	F64Const(0),
+];
+
 // pub const I32_TESTOP: [Instruction; 1] = [
 // 	I32Eqz,
 // ];
