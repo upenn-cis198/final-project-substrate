@@ -15,14 +15,20 @@ use std::mem::discriminant;
  * 3. Good tests with expected failures
  */
 
+/// Type alias representing the values popped from the stack by a given operation.
+/// Mostly just for readability
 type Pop = Vec<ValueType>;
+/// Type alias representing the values pushed onto the stack by a given operation.
+/// Mostly just for readability
 type Push = Vec<ValueType>;
 
+/// The "signature" of a type, meaning the values pushed and popped from the stack by the operation.
 struct Signature {
 	pop: Pop,
 	push: Push
 }
 
+/// An enum representing which instructions should be validated
 pub enum Filter {
 	NumericInstructions,
 	NoFilter
@@ -37,10 +43,12 @@ pub struct ModuleValidator<'a> {
 
 impl<'a> ModuleValidator<'a> {
 
+	/// Convenience method for creating a new validator
 	pub fn new(module: &'a Module, filter: Filter) -> Self {
 		ModuleValidator{ module, filter, stack: vec![] }
 	}
 
+	/// Handler method that loops over functions and delegates validation to `check_instructions`
 	pub fn validate(&mut self) -> Result<bool, InstructionError> {
 		match self.module.code_section() {
 			Some(functions) => {
@@ -56,6 +64,7 @@ impl<'a> ModuleValidator<'a> {
 		}
 	}
 
+	/// A method used to determine what the classification of each instruction, and execute the correct method on it
 	fn check_instructions(&mut self, body: &FuncBody, index: usize) -> Result<bool, InstructionError> {
 		for instruction in body.code().elements() {
 			if contains(instruction, &GET_INST) && !self.push_global_or_local(instruction, body, index)? {
@@ -75,6 +84,7 @@ impl<'a> ModuleValidator<'a> {
 		Ok(true)
 	}
 
+	/// Evaluates a signature and determines if the stack can support the instruction in it's current state
 	fn validate_instruction(&mut self, signature: &Signature, instruction: &Instruction) -> Result<bool, InstructionError> {
 		for signature_value in &signature.pop {
 			let value = self.stack.pop();
@@ -93,6 +103,7 @@ impl<'a> ModuleValidator<'a> {
 		Ok(true)
 	}
 
+	/// A method used to load global or local variable types onto the stack
 	fn push_global_or_local(&mut self, instruction: &Instruction, body: &FuncBody, index: usize) -> Result<bool, InstructionError> {
 
 		// These next couple lines are just to get the parameters of the function we're dealing with.
@@ -133,10 +144,13 @@ impl<'a> ModuleValidator<'a> {
 	}
 }
 
+/// Checks the **discriminant** of an instruction against the **discriminants** of a container,
+/// to determine if the given instruction is in the container while ignoring values.
 fn contains(instruction: &Instruction, container: &[Instruction]) -> bool {
 	container.iter().any(|f| discriminant(f) == discriminant(instruction))
 }
 
+/// Given an instruction, determine it's signature based on what classification it is in.
 fn get_instruction_signature(instruction: &Instruction) -> Option<Signature> {
 	// returns some signature if there is a type we are interested in
 	// returns None otherwise
@@ -155,6 +169,7 @@ fn get_instruction_signature(instruction: &Instruction) -> Option<Signature> {
 	}
 }
 
+/// Determines the signature of a const instruction, which are slightly different from regular instructions	
 fn get_const_signature(instruction: &Instruction) -> Option<Signature> {
 	let inst_type = &format!("{:?}", instruction)[..3];
 
